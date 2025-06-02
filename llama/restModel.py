@@ -1,5 +1,6 @@
 from transformers import LlamaPreTrainedModel
 from transformers.models.llama.configuration_llama import LlamaConfig
+from transformers import AutoTokenizer
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer,LlamaMLP,LlamaRMSNorm
 import torch.nn as nn
 import torch
@@ -65,29 +66,43 @@ class restModel(LlamaPreTrainedModel):
             x = x.to(layer.self_attn.k_proj.weight.device)
             position_ids = torch.arange(0, x.shape[1], dtype=torch.long).unsqueeze(0).expand(x.size(0), -1).to(x.device)
             x = layer(x,position_ids=position_ids)[0]
-            print(f'{i}layers',x)
+            # print(f'{i}layers',x)
             i+=1
-        print(x.shape)
+        # print(x.shape)
         x = self.norm(x)
         logits = self.lm_head(x)
         probs = torch.softmax(logits, dim=-1)
         next_token_index = torch.argmax(probs, dim=-1)
-        return next_token_index
+        return logits
 
-#load model   
-base_path = "/gemini/data-1/model_base/Llama-2-7b-hf"
-test_model = restModel(LlamaConfig.from_pretrained(base_path))
-test_model.layers0_mlp.mlp.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/layers0_mlp.pt'))
-test_model.layers0_mlp.post_attention_layernorm.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/layers0_post_attention_layernorm.pt'))
-for i in range(1,32):
-    test_model.layers[i-1].load_state_dict(torch.load(f'/gemini/data-3/model_base/llama-2-7b-1/layers{i}.pt'))
-test_model.lm_head.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/lm_head.pt'))
-test_model.norm.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/norm.pt'))
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-test_model.to(device)
+def main():   
+    #load model
+    base_path = "/gemini/data-1/model_base/Llama-2-7b-chat-hf"
+    test_model = restModel(LlamaConfig.from_pretrained(base_path))
+    test_model.layers0_mlp.mlp.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/layers0_mlp.pt'))
+    test_model.layers0_mlp.post_attention_layernorm.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/layers0_post_attention_layernorm.pt'))
+    for i in range(1, 32):
+        test_model.layers[i - 1].load_state_dict(torch.load(f'/gemini/data-3/model_base/llama-2-7b-1/layers{i}.pt'))
+    test_model.lm_head.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/lm_head.pt'))
+    test_model.norm.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/norm.pt'))
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    test_model.to(device)
 
-#load input and infernence
-loaded_output_ids = torch.load('/gemini/code/mistral_finetune_code/tee/tee2/on_out/output_ids.pt')
-output=test_model(loaded_output_ids)
-print(output)
+#load data and inference
+    tokenizer = AutoTokenizer.from_pretrained(base_path, trust_remote_code=True,device_map='auto')
+    loaded_output_ids = torch.load('/gemini/code/mistral_finetune_code/tee/tee2/on_out/output_ids.pt')
+    output = test_model(loaded_output_ids)
 
+
+# if hasattr(output, 'logits'):
+#     output_ids = output.logits.argmax(dim=-1)
+# else:
+#     output_ids = output
+    generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+    print(generated_text)
+
+
+
+
+if __name__ == "__main__":
+    main()

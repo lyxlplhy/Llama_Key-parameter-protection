@@ -60,26 +60,37 @@ class oneDecoder(LlamaPreTrainedModel):
         position_ids = torch.arange(0, x.shape[1], dtype=torch.long).unsqueeze(0).expand(x.size(0), -1).to(x.device)
         x=self.layers0_atten(x,position_ids=position_ids)
         return x
-    
-#load model    
-base_path = "/gemini/data-1/model_base/Llama-2-7b-hf"
-test_model = oneDecoder(LlamaConfig.from_pretrained(base_path))
-embedding_state_dict = torch.load('/gemini/data-3/model_base/llama-2-7b-1/embedding_state_dict.pt')
-test_model.embed_tokens.load_state_dict(embedding_state_dict)
-test_model.layers0_atten.input_layernorm.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/layers0_input_layernorm.pt'))
-test_model.layers0_atten.self_attn.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/layers0_self_attn.pt'))
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-test_model.to(device)
 
-#infernece
-prompt="hello"
-from transformers import AutoTokenizer
-tokenizer = AutoTokenizer.from_pretrained(base_path, trust_remote_code=True,device_map='auto')
-inputs = tokenizer(prompt, return_tensors="pt")
-inputs = {k: v.to(device) for k, v in inputs.items()}
-output_ids = test_model(inputs['input_ids'])  
-print(output_ids)
+def main():
+    #load model    
+    base_path = "/gemini/data-1/model_base/Llama-2-7b-chat-hf"
+    test_model = oneDecoder(LlamaConfig.from_pretrained(base_path))
+    embedding_state_dict = torch.load('/gemini/data-3/model_base/llama-2-7b-1/embedding_state_dict.pt')
+    test_model.embed_tokens.load_state_dict(embedding_state_dict)
+    test_model.layers0_atten.input_layernorm.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/layers0_input_layernorm.pt'))
+    test_model.layers0_atten.self_attn.load_state_dict(torch.load('/gemini/data-3/model_base/llama-2-7b-1/layers0_self_attn.pt'))
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    test_model.to(device)
 
-#save_result
-torch.save(output_ids, '/gemini/code/mistral_finetune_code/tee/tee2/on_out/output_ids.pt')
+    #infernece
+    messages = [
+    {"role": "user", "content": "Translate the following content into Chinese: Hello"},
+]
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained(base_path, trust_remote_code=True,device_map='auto')
+    input_ids = tokenizer.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    return_tensors="pt"
+).to(test_model.device)
 
+
+
+    output_ids = test_model(input_ids)  
+    print(output_ids)
+
+    #save_result
+    torch.save(output_ids, '/gemini/code/mistral_finetune_code/tee/tee2/on_out/output_ids.pt')
+
+if __name__ == "__main__":
+    main()
